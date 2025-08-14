@@ -16,7 +16,7 @@ parser.add_argument('--lr', default=0.001, type=float)
 parser.add_argument('--maxlen', default=50, type=int)
 parser.add_argument('--hidden_units', default=50, type=int)
 parser.add_argument('--num_blocks', default=2, type=int)
-parser.add_argument('--num_epochs', default=200, type=int)
+parser.add_argument('--num_epochs', default=1, type=int)
 parser.add_argument('--num_heads', default=1, type=int)
 parser.add_argument('--dropout_rate', default=0.5, type=float)
 parser.add_argument('--l2_emb', default=0.0, type=float)
@@ -121,6 +121,8 @@ if __name__ == '__main__':
                     os.makedirs(os.path.join(folder))
                 except:
                     print()
+            absolute_path = os.path.abspath(os.path.join(folder, fname))
+            print("Saving model to:", absolute_path)
             torch.save([model.kwargs, model.state_dict()], os.path.join(folder, fname))
     
     sampler.close()
