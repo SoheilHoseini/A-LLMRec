@@ -54,7 +54,7 @@ def train_model_phase1_(rank, world_size, args):
     model = A_llmrec_model(args).to(args.device)
     
     # preprocess data
-    dataset = data_partition(args.rec_pre_trained_data, path=f'./data/amazon/{args.rec_pre_trained_data}.txt')
+    dataset = data_partition(args.rec_pre_trained_data, path=f'/content/drive/MyDrive/Rec_Proj_DL/data/amazon/{args.rec_pre_trained_data}.txt')
     [user_train, user_valid, user_test, usernum, itemnum] = dataset
     print('user num:', usernum, 'item num:', itemnum)
     num_batch = len(user_train) // args.batch_size1
@@ -106,7 +106,7 @@ def train_model_phase2_(rank,world_size,args):
     phase1_epoch = 10
     model.load_model(args, phase1_epoch=phase1_epoch)
 
-    dataset = data_partition(args.rec_pre_trained_data, path=f'./data/amazon/{args.rec_pre_trained_data}.txt')
+    dataset = data_partition(args.rec_pre_trained_data, path=f'/content/drive/MyDrive/Rec_Proj_DL/data/amazon/{args.rec_pre_trained_data}.txt')
     [user_train, user_valid, user_test, usernum, itemnum] = dataset
     print('user num:', usernum, 'item num:', itemnum)
     num_batch = len(user_train) // args.batch_size2
@@ -157,7 +157,7 @@ def inference_(rank, world_size, args):
     phase2_epoch = 5
     model.load_model(args, phase1_epoch=phase1_epoch, phase2_epoch=phase2_epoch)
 
-    dataset = data_partition(args.rec_pre_trained_data, path=f'./data/amazon/{args.rec_pre_trained_data}.txt')
+    dataset = data_partition(args.rec_pre_trained_data, path=f'/content/drive/MyDrive/Rec_Proj_DL/data/amazon/{args.rec_pre_trained_data}.txt')
     [user_train, user_valid, user_test, usernum, itemnum] = dataset
     print('user num:', usernum, 'item num:', itemnum)
     num_batch = len(user_train) // args.batch_size_infer

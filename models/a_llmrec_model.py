@@ -31,7 +31,7 @@ class A_llmrec_model(nn.Module):
         self.args = args
         self.device = args.device
         
-        with open(f'./data/amazon/{args.rec_pre_trained_data}_text_name_dict.json.gz','rb') as ft:
+        with open(f'/content/drive/MyDrive/Rec_Proj_DL/data/amazon/{args.rec_pre_trained_data}_text_name_dict.json.gz','rb') as ft:
             self.text_name_dict = pickle.load(ft)
         
         self.recsys = RecSys(args.recsys, rec_pre_trained_data, self.device)
