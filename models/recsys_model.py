@@ -11,9 +11,9 @@ import torch.nn.functional as F
 from utils import *
 from pre_train.sasrec.model import SASRec
 
-
+from config import get_project_path
 def load_checkpoint(recsys, pre_trained):
-    path = f'/content/drive/MyDrive/Rec_Proj_DL/pre_train/{recsys}/{pre_trained}/'
+    path = f'{get_project_path()}/pre_train/{recsys}/{pre_trained}/'
     
     pth_file_path = find_filepath(path, '.pth')
     assert len(pth_file_path) == 1, 'There are more than two models in this dir. You need to remove other model files.\n'
