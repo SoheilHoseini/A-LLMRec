@@ -10,7 +10,7 @@ from datetime import datetime
 from pytz import timezone
 from torch.utils.data import Dataset
 
-    
+from config import get_project_path
 # sampler for batch generation
 def random_neq(l, r, s):
     t = np.random.randint(l, r)
@@ -157,7 +157,7 @@ def data_partition(fname, path=None):
     
     # f = open('./pre_train/sasrec/data/%s.txt' % fname, 'r')
     if path == None:
-        f = open('/content/drive/MyDrive/Rec_Proj_DL/data/amazon/%s.txt' % fname, 'r')
+        f = open(f'{get_project_path()}/data/amazon/%s.txt' % fname, 'r')
     else:
         f = open(path, 'r')
     for line in f:
