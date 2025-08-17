@@ -10,6 +10,10 @@ from models.recsys_model import *
 from models.llm4rec import *
 from sentence_transformers import SentenceTransformer
 
+import os
+def get_project_path():
+    """Get the base project path from environment variable or default"""
+    return os.environ.get('PROJECT_BASE_PATH', '/content/drive/MyDrive/Rec_Proj_DL')
 
 class two_layer_mlp(nn.Module):
     def __init__(self, dims):
@@ -31,7 +35,7 @@ class A_llmrec_model(nn.Module):
         self.args = args
         self.device = args.device
         
-        with open(f'/content/drive/MyDrive/Rec_Proj_DL/data/amazon/{args.rec_pre_trained_data}_text_name_dict.json.gz','rb') as ft:
+        with open(f'{get_project_path()}/data/amazon/{args.rec_pre_trained_data}_text_name_dict.json.gz','rb') as ft:
             self.text_name_dict = pickle.load(ft)
         
         self.recsys = RecSys(args.recsys, rec_pre_trained_data, self.device)
@@ -62,19 +66,19 @@ class A_llmrec_model(nn.Module):
             self.llm = llm4rec(device=self.device, llm_model=args.llm)
             
             self.log_emb_proj = nn.Sequential(
-                nn.Linear(self.rec_sys_dim, self.llm.llm_model.config.hidden_size),
-                nn.LayerNorm(self.llm.llm_model.config.hidden_size),
+                nn.Linear(self.rec_sys_dim, 2048),
+                nn.LayerNorm(2048),
                 nn.LeakyReLU(),
-                nn.Linear(self.llm.llm_model.config.hidden_size, self.llm.llm_model.config.hidden_size)
+                nn.Linear(2048, 2048)
             )
             nn.init.xavier_normal_(self.log_emb_proj[0].weight)
             nn.init.xavier_normal_(self.log_emb_proj[3].weight)
 
             self.item_emb_proj = nn.Sequential(
-                nn.Linear(128, self.llm.llm_model.config.hidden_size),
-                nn.LayerNorm(self.llm.llm_model.config.hidden_size),
+                nn.Linear(128, 2048),
+                nn.LayerNorm(2048),
                 nn.GELU(),
-                nn.Linear(self.llm.llm_model.config.hidden_size, self.llm.llm_model.config.hidden_size)
+                nn.Linear(2048, 2048)
             )
             nn.init.xavier_normal_(self.item_emb_proj[0].weight)
             nn.init.xavier_normal_(self.item_emb_proj[3].weight)
@@ -94,8 +98,8 @@ class A_llmrec_model(nn.Module):
             torch.save(self.item_emb_proj.state_dict(), out_dir + 'item_proj.pt')
             
     def load_model(self, args, phase1_epoch=None, phase2_epoch=None):
-        out_dir = f'./models/saved_models/{args.rec_pre_trained_data}_{args.recsys}_{phase1_epoch}_'
-        
+        # out_dir = f'./models/saved_models/{args.rec_pre_trained_data}_{args.recsys}_{phase1_epoch}_'
+        out_dir = f'/content/drive/MyDrive/models/saved_models/{args.rec_pre_trained_data}_sasrec_{phase1_epoch}_'
         mlp = torch.load(out_dir + 'mlp.pt', map_location = args.device)
         self.mlp.load_state_dict(mlp)
         del mlp
@@ -379,7 +383,7 @@ class A_llmrec_model(nn.Module):
                 return_tensors="pt"
             ).to(self.device)
             
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast('cuda'):
                 inputs_embeds = self.llm.llm_model.get_input_embeddings()(llm_tokens.input_ids)
                 
                 llm_tokens, inputs_embeds = self.llm.replace_hist_candi_token(llm_tokens, inputs_embeds, interact_embs, candidate_embs)
@@ -388,20 +392,31 @@ class A_llmrec_model(nn.Module):
                 inputs_embeds = torch.cat([log_emb, inputs_embeds], dim=1)
                 attention_mask = torch.cat([atts_llm, llm_tokens.attention_mask], dim=1)
                     
+                # outputs = self.llm.llm_model.generate(
+                #     inputs_embeds=inputs_embeds,
+                #     attention_mask=attention_mask,
+                #     do_sample=False,
+                #     top_p=0.9,
+                #     temperature=1,
+                #     num_beams=1,
+                #     max_length=512,
+                #     min_length=1,
+                #     pad_token_id=self.llm.llm_tokenizer.eos_token_id,
+                #     repetition_penalty=1.5,
+                #     length_penalty=1,
+                #     num_return_sequences=1,
+                # )
                 outputs = self.llm.llm_model.generate(
-                    inputs_embeds=inputs_embeds,
-                    attention_mask=attention_mask,
-                    do_sample=False,
-                    top_p=0.9,
-                    temperature=1,
-                    num_beams=1,
-                    max_length=512,
-                    min_length=1,
-                    pad_token_id=self.llm.llm_tokenizer.eos_token_id,
-                    repetition_penalty=1.5,
-                    length_penalty=1,
-                    num_return_sequences=1,
-                )
+                      inputs_embeds=inputs_embeds,
+                      attention_mask=attention_mask,
+                      do_sample=False,
+                      num_beams=1,
+                      max_new_tokens=50,  # Changed from max_length to max_new_tokens
+                      min_length=1,
+                      pad_token_id=self.llm.llm_tokenizer.eos_token_id,
+                      repetition_penalty=1.5,
+                      num_return_sequences=1,
+                  )
 
             outputs[outputs == 0] = 2 # convert output id 0 to 2 (eos_token_id)
             output_text = self.llm.llm_tokenizer.batch_decode(outputs, skip_special_tokens=True)

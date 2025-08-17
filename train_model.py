@@ -2,10 +2,7 @@ import os
 import torch
 import random
 import time
-import os
-
 from tqdm import tqdm
-
 import torch.multiprocessing as mp
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
@@ -14,6 +11,10 @@ from torch.distributed import init_process_group, destroy_process_group
 
 from models.a_llmrec_model import *
 from pre_train.sasrec.utils import data_partition, SeqDataset, SeqDataset_Inference
+
+def get_project_path():
+    """Get the base project path from environment variable or default"""
+    return os.environ.get('PROJECT_BASE_PATH', '/content/drive/MyDrive/Rec_Proj_DL')
 
 
 def setup_ddp(rank, world_size):
@@ -54,7 +55,7 @@ def train_model_phase1_(rank, world_size, args):
     model = A_llmrec_model(args).to(args.device)
     
     # preprocess data
-    dataset = data_partition(args.rec_pre_trained_data, path=f'/content/drive/MyDrive/Rec_Proj_DL/data/amazon/{args.rec_pre_trained_data}.txt')
+    dataset = data_partition(args.rec_pre_trained_data, path=f'{get_project_path()}/data/amazon/{args.rec_pre_trained_data}.txt')
     [user_train, user_valid, user_test, usernum, itemnum] = dataset
     print('user num:', usernum, 'item num:', itemnum)
     num_batch = len(user_train) // args.batch_size1
@@ -106,7 +107,7 @@ def train_model_phase2_(rank,world_size,args):
     phase1_epoch = 10
     model.load_model(args, phase1_epoch=phase1_epoch)
 
-    dataset = data_partition(args.rec_pre_trained_data, path=f'/content/drive/MyDrive/Rec_Proj_DL/data/amazon/{args.rec_pre_trained_data}.txt')
+    dataset = data_partition(args.rec_pre_trained_data, path=f'{get_project_path()}/data/amazon/{args.rec_pre_trained_data}.txt')
     [user_train, user_valid, user_test, usernum, itemnum] = dataset
     print('user num:', usernum, 'item num:', itemnum)
     num_batch = len(user_train) // args.batch_size2
@@ -153,11 +154,11 @@ def inference_(rank, world_size, args):
         args.device = 'cuda:' + str(rank)
         
     model = A_llmrec_model(args).to(args.device)
-    phase1_epoch = 10
-    phase2_epoch = 5
+    phase1_epoch = 10  # Stage 1 models are at epoch 10
+    phase2_epoch = 1   # Stage 2 models are at epoch 1
     model.load_model(args, phase1_epoch=phase1_epoch, phase2_epoch=phase2_epoch)
 
-    dataset = data_partition(args.rec_pre_trained_data, path=f'/content/drive/MyDrive/Rec_Proj_DL/data/amazon/{args.rec_pre_trained_data}.txt')
+    dataset = data_partition(args.rec_pre_trained_data, path=f'{get_project_path()}/data/amazon/{args.rec_pre_trained_data}.txt')
     [user_train, user_valid, user_test, usernum, itemnum] = dataset
     print('user num:', usernum, 'item num:', itemnum)
     num_batch = len(user_train) // args.batch_size_infer

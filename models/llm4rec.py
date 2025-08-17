@@ -14,8 +14,10 @@ class llm4rec(nn.Module):
         self.device = device
         
         if llm_model == 'opt':
-            self.llm_model = OPTForCausalLM.from_pretrained("facebook/opt-6.7b", torch_dtype=torch.float16, load_in_8bit=True, device_map=self.device)
-            self.llm_tokenizer = AutoTokenizer.from_pretrained("facebook/opt-6.7b", use_fast=False)
+            self.llm_model = OPTForCausalLM.from_pretrained("facebook/opt-1.3b", torch_dtype=torch.float16, device_map="auto", low_cpu_mem_usage=True)
+            self.llm_tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b", use_fast=False)
+            # self.llm_model = OPTForCausalLM.from_pretrained("facebook/opt-6.7b", torch_dtype=torch.float16, device_map=self.device)
+            # self.llm_tokenizer = AutoTokenizer.from_pretrained("facebook/opt-6.7b", use_fast=False)
             # self.llm_model = OPTForCausalLM.from_pretrained("facebook/opt-6.7b", torch_dtype=torch.float16, device_map=self.device)
         else:
             raise Exception(f'{llm_model} is not supported')
@@ -115,7 +117,7 @@ class llm4rec(nn.Module):
         inputs_embeds = torch.cat([log_emb, inputs_embeds], dim=1)
         attention_mask = torch.cat([atts_llm, llm_tokens['attention_mask']], dim=1)
         
-        with torch.cuda.amp.autocast():
+        with torch.amp.autocast('cuda'):
             outputs = self.llm_model(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
@@ -124,4 +126,7 @@ class llm4rec(nn.Module):
             )
         loss = outputs.loss
 
+        # Add this before return loss
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         return loss
