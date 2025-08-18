@@ -10,7 +10,11 @@ from datetime import datetime
 from pytz import timezone
 from torch.utils.data import Dataset
 
-from config import get_project_path
+
+def get_project_path():
+    """Get the base project path from environment variable or default"""
+    return os.environ.get('PROJECT_BASE_PATH', '/content/drive/MyDrive/Rec_Proj_DL')
+
 # sampler for batch generation
 def random_neq(l, r, s):
     t = np.random.randint(l, r)
