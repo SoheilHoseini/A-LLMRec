@@ -18,8 +18,14 @@ def get_project_path():
 class two_layer_mlp(nn.Module):
     def __init__(self, dims):
         super().__init__()
-        self.fc1 = nn.Linear(dims, 128)
-        self.fc2 = nn.Linear(128, dims)
+        # self.fc1 = nn.Linear(dims, 128)
+        # self.fc2 = nn.Linear(128, dims)
+        # self.sigmoid = nn.Sigmoid()
+
+        # Adaptive hidden dimension based on input
+        hidden_dim = min(128, dims)  # Use 128 or input dim, whichever is smaller
+        self.fc1 = nn.Linear(dims, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, dims)
         self.sigmoid = nn.Sigmoid()
         
     def forward(self, x):
@@ -44,10 +50,35 @@ class A_llmrec_model(nn.Module):
         self.sbert_dim = 768
         
         self.mlp = two_layer_mlp(self.rec_sys_dim)
+        # if args.pretrain_stage1:
+        #     self.sbert = SentenceTransformer('nq-distilbert-base-v1')
+        #     self.mlp2 = two_layer_mlp(self.sbert_dim)
+
         if args.pretrain_stage1:
-            self.sbert = SentenceTransformer('nq-distilbert-base-v1')
+            # # Use better sentence transformer model for improved semantic understanding
+            # # 'all-MiniLM-L12-v2' is specifically trained for semantic similarity
+            # self.sbert = SentenceTransformer('all-MiniLM-L12-v2')
+            #
+            # # Check actual embedding dimension
+            # test_embedding = self.sbert.encode("test", convert_to_tensor=True)
+            # actual_dim = test_embedding.shape[0]
+            #
+            # # Update sbert_dim if different (all-MiniLM-L12-v2 outputs 384 dims)
+            # if actual_dim != self.sbert_dim:
+            #     print(f"SBERT model outputs {actual_dim} dimensions, updating from {self.sbert_dim}")
+            #     self.sbert_dim = actual_dim
+            #
+            # self.mlp2 = two_layer_mlp(self.sbert_dim)
+
+            # Use configurable sentence transformer model
+            self.sbert = SentenceTransformer(args.sbert_model)
+
+            # Check actual embedding dimension
+            test_embedding = self.sbert.encode("test", convert_to_tensor=True)
+            self.sbert_dim = test_embedding.shape[0]
+
             self.mlp2 = two_layer_mlp(self.sbert_dim)
-        
+
         self.mse = nn.MSELoss()
         
         self.maxlen = args.maxlen
@@ -140,7 +171,20 @@ class A_llmrec_model(nn.Module):
             return f'"{self.text_name_dict[t].get(item,t_)}"'
         elif not title_flag and description_flag:
             return f'"{self.text_name_dict[d].get(item,d_)}"'
-        
+
+    def preprocess_text_for_sbert(self, text):
+        """
+        Preprocess text for better SBERT embeddings
+        """
+        # Remove excessive whitespace
+        text = ' '.join(text.split())
+
+        # Limit length for SBERT (max 256 tokens for most models)
+        if len(text) > 500:  # Character limit
+            text = text[:497] + "..."
+
+        return text
+
     def get_item_emb(self, item_ids):
         with torch.no_grad():
             item_embs = self.recsys.model.item_emb(torch.LongTensor(item_ids).to(self.device))
@@ -195,9 +239,12 @@ class A_llmrec_model(nn.Module):
             end_inx += 60
             iterss +=1
             
-            pos_text = self.find_item_text(pos__)
-            neg_text = self.find_item_text(neg__)
-            
+            # pos_text = self.find_item_text(pos__)
+            # neg_text = self.find_item_text(neg__)
+
+            pos_text = [self.preprocess_text_for_sbert(t) for t in self.find_item_text(pos__)]
+            neg_text = [self.preprocess_text_for_sbert(t) for t in self.find_item_text(neg__)]
+
             pos_token = self.sbert.tokenize(pos_text)
             pos_text_embedding= self.sbert({'input_ids':pos_token['input_ids'].to(self.device),'attention_mask':pos_token['attention_mask'].to(self.device)})['sentence_embedding']
             neg_token = self.sbert.tokenize(neg_text)
@@ -291,26 +338,37 @@ class A_llmrec_model(nn.Module):
             candidate_text, candidate_ids = self.make_candidate_text(seq[i][seq[i]>0], candidate_num, target_item_id, target_item_title)
             
             input_text = ''
-            input_text += ' is a user representation.'
+            input_text += ' is a user representation.\n'
                 
+            # Add dataset support for All_Beauty
             if self.args.rec_pre_trained_data == 'Movies_and_TV':
                 input_text += 'This user has watched '
+                domain = "movies"
+                action = "watch"
             elif self.args.rec_pre_trained_data == 'Video_Games':
                 input_text += 'This user has played '
-            elif self.args.rec_pre_trained_data == 'Luxury_Beauty' or self.args.rec_pre_trained_data == 'Toys_and_Games':
+                domain = "games"
+                action = "play"
+            elif self.args.rec_pre_trained_data in ['Luxury_Beauty', 'Toys_and_Games', 'All_Beauty', 'Beauty']:
                 input_text += 'This user has bought '
+                domain = "beauty products" if 'Beauty' in self.args.rec_pre_trained_data else "items"
+                action = "buy"
+            else:
+                input_text += 'This user has interacted with '
+                domain = "items"
+                action = "interact with"
                 
             input_text += interact_text
-            
-            if self.args.rec_pre_trained_data == 'Movies_and_TV':
-                input_text +=' in the previous. Recommend one next movie for this user to watch next from the following movie title set, '
-            elif self.args.rec_pre_trained_data == 'Video_Games':
-                input_text +=' in the previous. Recommend one next game for this user to play next from the following game title set, '            
-            elif self.args.rec_pre_trained_data == 'Luxury_Beauty' or self.args.rec_pre_trained_data == 'Toys_and_Games':
-                input_text +=' in the previous. Recommend one next item for this user to buy next from the following item title set, '
-                    
-            input_text += candidate_text
-            input_text += '. The recommendation is '
+            input_text += ' in the past.\n\n'
+
+            # Add Chain-of-Thought reasoning
+            input_text += 'Let me analyze step by step:\n'
+            input_text += '1. Based on the purchase history, I should identify what types of products this user prefers.\n'
+            input_text += '2. From the candidates below, I need to find which ones match these preferences.\n'
+            input_text += f'3. I will recommend the best {domain[:-1]} for this user to {action} next.\n\n'
+
+            input_text += f'Available {domain}: {candidate_text}\n'
+            input_text += 'The recommendation is'
 
             text_input.append(input_text)
             text_output.append(target_item_title)
@@ -342,28 +400,40 @@ class A_llmrec_model(nn.Module):
                 interact_text, interact_ids = self.make_interact_text(seq[i][seq[i]>0], 10)
                 candidate_num = 20
                 candidate_text, candidate_ids = self.make_candidate_text(seq[i][seq[i]>0], candidate_num, target_item_id, target_item_title)
-                
+
                 input_text = ''
-                input_text += ' is a user representation.'
+                input_text += ' is a user representation.\n'
+
+                # Add dataset support for All_Beauty
                 if self.args.rec_pre_trained_data == 'Movies_and_TV':
                     input_text += 'This user has watched '
+                    domain = "movies"
+                    action = "watch"
                 elif self.args.rec_pre_trained_data == 'Video_Games':
                     input_text += 'This user has played '
-                elif self.args.rec_pre_trained_data == 'Luxury_Beauty' or self.args.rec_pre_trained_data == 'Toys_and_Games':
+                    domain = "games"
+                    action = "play"
+                elif self.args.rec_pre_trained_data in ['Luxury_Beauty', 'Toys_and_Games', 'All_Beauty', 'Beauty']:
                     input_text += 'This user has bought '
-                    
+                    domain = "beauty products" if 'Beauty' in self.args.rec_pre_trained_data else "items"
+                    action = "buy"
+                else:
+                    input_text += 'This user has interacted with '
+                    domain = "items"
+                    action = "interact with"
+
                 input_text += interact_text
-                
-                if self.args.rec_pre_trained_data == 'Movies_and_TV':
-                    input_text +=' in the previous. Recommend one next movie for this user to watch next from the following movie title set, '
-                elif self.args.rec_pre_trained_data == 'Video_Games':
-                    input_text +=' in the previous. Recommend one next game for this user to play next from the following game title set, '            
-                elif self.args.rec_pre_trained_data == 'Luxury_Beauty' or self.args.rec_pre_trained_data == 'Toys_and_Games':
-                    input_text +=' in the previous. Recommend one next item for this user to buy next from the following item title set, '
-                
-                input_text += candidate_text
-                input_text += '. The recommendation is '
-                
+                input_text += ' in the past.\n\n'
+
+                # Add Chain-of-Thought reasoning for generation
+                input_text += 'Step-by-step analysis:\n'
+                input_text += '1. User preferences: Based on the history, this user prefers specific types of products.\n'
+                input_text += '2. Matching process: I need to evaluate which of the following best matches their preferences.\n'
+                input_text += f'3. Final decision: The best {domain[:-1]} from these options.\n\n'
+
+                input_text += f'Candidates: {candidate_text}\n'
+                input_text += 'The recommendation is'
+
                 answer.append(target_item_title)
                 text_input.append(input_text)
                 
