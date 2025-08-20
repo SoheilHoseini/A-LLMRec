@@ -29,6 +29,13 @@ if __name__ == "__main__":
     # hyperparameters options
     parser.add_argument('--batch_size1', default=32, type=int)
     parser.add_argument('--batch_size2', default=2, type=int)
+
+    # SBERT model selection
+    parser.add_argument('--sbert_model', type=str, default='all-MiniLM-L12-v2',
+                        choices=['nq-distilbert-base-v1', 'all-MiniLM-L12-v2',
+                                 'all-mpnet-base-v2', 'all-MiniLM-L6-v2'],
+                        help='SBERT model for text encoding')
+
     parser.add_argument('--batch_size_infer', default=2, type=int)
     parser.add_argument('--maxlen', default=50, type=int)
     parser.add_argument('--num_epochs', default=1, type=int)
